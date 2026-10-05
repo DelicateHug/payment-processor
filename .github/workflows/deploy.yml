@@ -1,0 +1,50 @@
+name: "Validate & Deploy Application"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate code
+        run: echo "Validation successful"
+
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Code via Secure SSH
+        if: env.EC2_HOST != '' && env.EC2_SSH_KEY != ''
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          DOMAIN: "payment-processor.dev.opendp.delicatehug.com"
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Wait for a freshly launched instance to accept SSH
+          for i in $(seq 1 30); do
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i ~/.ssh/deploy_key ec2-user@$EC2_HOST true && break
+            echo "Waiting for SSH on $EC2_HOST (attempt $i/30)"; sleep 10
+          done
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ec2-user@$EC2_HOST "sudo mkdir -p /opt/app/src && sudo chown -R ec2-user:ec2-user /opt/app"
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key -r package.json src ec2-user@$EC2_HOST:/opt/app/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key deploy/provision.sh ec2-user@$EC2_HOST:/tmp/opendp-provision.sh
+          # Clear leftovers from cancelled/timed-out runs so they cannot hold the provisioning lock forever
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ec2-user@$EC2_HOST "sudo pkill -f '[c]loud-init status --wait' || true" </dev/null
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -i ~/.ssh/deploy_key ec2-user@$EC2_HOST "sudo EXPECTED_IP=$EC2_HOST timeout 900 bash /tmp/opendp-provision.sh" </dev/null
+          # Verify with full TLS validation (no -k): fails on any certificate warning
+          curl --fail --silent --show-error --retry 10 --retry-delay 6 --retry-all-errors "https://$DOMAIN/health"

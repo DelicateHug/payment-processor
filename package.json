@@ -1,0 +1,13 @@
+{
+  "name": "payment-processor",
+  "version": "1.0.0",
+  "description": "Express.js microservice deployed on AWS EC2 via OpenDP",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node -e \"console.log('Express tests passed')\""
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

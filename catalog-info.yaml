@@ -1,0 +1,18 @@
+apiVersion: open-security.idp/v1alpha1
+kind: Component
+metadata:
+  name: payment-processor
+  title: payment-processor Service
+  description: Auto-provisioned express microservice on AWS EC2 (payment-processor.dev.opendp.delicatehug.com)
+  tags:
+    - nodejs
+    - ec2
+    - cloud-asset
+    - cloudflare-dns
+spec:
+  type: service
+  lifecycle: production
+  owner: developer
+  domain: payment-processor.dev.opendp.delicatehug.com
+  liveUrl: https://payment-processor.dev.opendp.delicatehug.com
+  healthCheckUrl: https://payment-processor.dev.opendp.delicatehug.com/health
